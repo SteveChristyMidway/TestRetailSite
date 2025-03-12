@@ -52,6 +52,7 @@
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             text-align: center;
+            max-width: 450px;
         }
         .product-card h3 {
             margin: 0.5rem 0;
@@ -65,6 +66,20 @@
             color: #27ae60;
             font-weight: bold;
         }
+
+        [v-cloak] {
+            display: none;
+        }
+
+        .image-container {
+            position: relative;
+            width: 100%;
+        }
+
+        .image-container img {
+            width: 100%;
+            object-fit: contain;
+        }
     </style>
 </head>
 <body>
@@ -75,38 +90,73 @@
         <p>Shop products to assist in your travels</p>
     </div>
 
-    <!-- Search Bar -->
-    <div class="search-container">
-        <input type="text" class="search-bar" placeholder="Search through time... (Currently searching 2018 catalog)">
-    </div>
+    <div id="vue-container">
+        <!-- Search Bar -->
+        <div class="search-container">
+            <input type="text" class="search-bar" placeholder="Search through time... (Currently searching 2018 catalog)" v-model="searchPhrase" v-on:keyup.enter="searchProducts">
+        </div>
 
-    <!-- Product List -->
-    <div class="products">
-        <div class="product-card">
-            <h3>Placeholder Item 1</h3>
-            <p>A mysterious artifact from the past</p>
-            <p class="price">$99.99</p>
-        </div>
-        <div class="product-card">
-            <h3>Placeholder Item 2</h3>
-            <p>A futuristic gadget from tomorrow</p>
-            <p class="price">$149.99</p>
-        </div>
-        <div class="product-card">
-            <h3>Placeholder Item 3</h3>
-            <p>A timeless classic from history</p>
-            <p class="price">$79.99</p>
-        </div>
-        <div class="product-card">
-            <h3>Placeholder Item 4</h3>
-            <p>An enigma wrapped in a mystery</p>
-            <p class="price">$199.99</p>
+        <!-- Product List -->
+        <div class="products" v-if="searchResults" v-cloak>
+            <div class="product-card" v-for="product in searchResults.products">
+                <h3>{{ product.partNumber }}</h3>
+                <p>{{ product.shortDescription }}</p>
+                <div class="image-container">
+                    <img v-if="product.images && product.images[0]" v-bind:src="product.images[0]" />
+                </div>
+                <p class="price">{{ product.retailSellingPrice | formatCurrency }}</p>
+                <p><button v-on:click="buy(product)">Buy</button></p>
+            </div>
         </div>
     </div>
 </body>
 
+<script id="mwp-script" src="https://checkout.dlr.direct/js/mwp.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js" integrity="sha384-t1tHLsbM7bYMJCXlhr0//00jSs7ZhsAhxgm191xFsyzvieTMCbUWKMhFg9I6ci8q" crossorigin="anonymous"></script>
 <script>
-    
+    v = new Vue({
+        el: '#vue-container',
+        data: {
+            searchResults: null,
+            searchPhrase: '',
+        },
+        mounted: function() {
+            const urlSearchParams = new URLSearchParams(window.location.search);
+            var input = Object.fromEntries(urlSearchParams.entries());
+            if (input.search)
+                this.searchPhrase = input.search;
+
+            this.searchProducts();
+        },
+        methods: {
+            searchProducts: async function() {
+                this.searchResults = await mwpSearchProducts(this.searchPhrase);
+            },
+            buy: async function(product) {
+                await mwpAddToCart(product.id, 1);
+
+                // Go to the checkout page
+                window.location = 'https://checkout.dlr.direct/Checkout';
+            }
+        },
+        filters: {
+            formatCurrency: function (value) {
+                var formatter = new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: 'USD',
+                    // These options are needed to round to whole numbers if that's what you want.
+                    //minimumFractionDigits: 0, // (this suffices for whole numbers, but will print 2500.10 as $2,500.1)
+                    //maximumFractionDigits: 0, // (causes 2500.99 to be printed as $2,501)
+                });
+
+                let number = +value;
+                if (isNaN(number) || value == null || typeof (value) === 'undefined')
+                    return value;
+                else
+                    return formatter.format(number); /* e.g. $2,500.00 */
+            },
+        }
+    })
 </script>
 
 </html>

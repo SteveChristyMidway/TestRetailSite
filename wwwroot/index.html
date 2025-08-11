@@ -105,6 +105,21 @@
                     <img v-if="product.images && product.images[0]" v-bind:src="product.images[0]" />
                 </div>
                 <p class="price">{{ product.retailSellingPrice | formatCurrency }}</p>
+
+                <div v-if="product && product.options">
+                     <template v-for="opt in product.options">
+                         <div class="form-group">
+                             <label v-bind:class="{mandatory: opt.required}">{{ opt.name }}</label>
+                             <select v-if="opt.type == 'Dropdown'" class="form-control" v-model="product.variation[opt.name]">
+                                 <option v-bind:value="undefined">-- Select {{ opt.name }} --</option>
+                                 <option v-for="val in opt.options" v-bind:value="val.value">{{ val.value }}</option>
+                             </select>
+                             <input v-if="opt.type == 'Text'" type="text" class="form-control" v-model="product.variation[opt.name]" />
+                             <input v-else-if="opt.type == 'Boolean'" type="checkbox" class="form-control" v-model="product.variation[opt.name]" />
+                         </div>
+                     </template>
+                </div>
+
                 <p><button v-on:click="buy(product)">Buy</button></p>
             </div>
         </div>
@@ -112,6 +127,7 @@
 </body>
 
 <script id="mwp-script" src="https://checkout.dlr.direct/js/mwp.js"></script>
+<!-- <script id="mwp-script" src="https://localhost:7003/js/mwp.js"></script> -->
 <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js" integrity="sha384-t1tHLsbM7bYMJCXlhr0//00jSs7ZhsAhxgm191xFsyzvieTMCbUWKMhFg9I6ci8q" crossorigin="anonymous"></script>
 <script>
     v = new Vue({
@@ -119,6 +135,7 @@
         data: {
             searchResults: null,
             searchPhrase: '',
+            optionSelections: {},
         },
         mounted: function() {
             const urlSearchParams = new URLSearchParams(window.location.search);
@@ -131,12 +148,25 @@
         methods: {
             searchProducts: async function() {
                 this.searchResults = await mwpSearchProducts(this.searchPhrase);
+
+                // Set up a variation object on the product model to configure the
+                // variation for product with options
+                for (let i = 0; i < this.searchResults.products.length; i++) {
+                    let product = this.searchResults.products[i];
+                    if (product.options && product.options.length)
+                        product.variation = {};
+                }
             },
             buy: async function(product) {
-                await mwpAddToCart(product.id, 1);
+                let response = await mwpAddToCart(product.id, 1, product.variation);
+
+                console.log('buy: ', response);
 
                 // Go to the checkout page
-                window.location = 'https://checkout.dlr.direct/Checkout';
+                if (response.successful)
+                    window.location = 'https://checkout.dlr.direct/Checkout';
+                else
+                    console.error(response);
             }
         },
         filters: {

@@ -104,7 +104,7 @@
                 <div class="image-container">
                     <img v-if="product.images && product.images[0]" v-bind:src="product.images[0]" />
                 </div>
-                <p class="price">{{ product.retailSellingPrice | formatCurrency }}</p>
+                <p class="price">{{ product | displayPrice }}</p>
 
                 <div v-if="product && product.options">
                      <template v-for="opt in product.options">
@@ -130,6 +130,49 @@
 <!-- <script id="mwp-script" src="https://localhost:7003/js/mwp.js"></script> -->
 <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js" integrity="sha384-t1tHLsbM7bYMJCXlhr0//00jSs7ZhsAhxgm191xFsyzvieTMCbUWKMhFg9I6ci8q" crossorigin="anonymous"></script>
 <script>
+    // ---- helpers ----
+    function normVal(v) {
+        if (Array.isArray(v)) {
+            return v.map(x => String(x).trim().toLowerCase()).sort().join("||");
+        }
+        return String(v ?? "").trim().toLowerCase();
+    }
+
+    function isExactSelectionsMatch(a, b) {
+        const aKeys = Object.keys(a || {});
+        const bKeys = Object.keys(b || {});
+
+        if (aKeys.length !== bKeys.length) return false;
+
+        for (const key of aKeys) {
+            if (!(key in b)) return false;
+            if (normVal(a[key]) !== normVal(b[key])) return false;
+        }
+
+        return true;
+    }
+
+
+    // ---- main API ----
+    function findMatchingVariation(product, currentSelections) {
+        if (!product?.variations?.length) return null;
+
+        const exactMatches = product.variations.filter(v =>
+            isExactSelectionsMatch(v.selections, currentSelections)
+        );
+
+        if (exactMatches.length === 0) return null;
+
+        // If multiple identical selection sets exist, prefer in-stock
+        exactMatches.sort((a, b) => {
+            const aStock = (typeof a.inStock === "number" && a.inStock > 0) ? 1 : 0;
+            const bStock = (typeof b.inStock === "number" && b.inStock > 0) ? 1 : 0;
+            return bStock - aStock;
+        });
+
+        return exactMatches[0];
+    }
+
     v = new Vue({
         el: '#vue-container',
         data: {
@@ -153,7 +196,7 @@
                 for (let i = 0; i < this.searchResults.products.length; i++) {
                     let product = this.searchResults.products[i];
                     if (product.options && product.options.length)
-                        product.variation = {};
+                        this.$set(product, 'variation', {});
                 }
             },
             buy: async function(product) {
@@ -184,6 +227,24 @@
                 else
                     return formatter.format(number); /* e.g. $2,500.00 */
             },
+            displayPrice: function(product) {
+                console.log('displayPrice: ', product);
+                let price = product.retailSellingPrice;
+
+                const v = findMatchingVariation(product, product.variation);
+                if (v && typeof v.retailPriceEach === "number")
+                    price = v.retailPriceEach;
+                
+                var formatter = new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: 'USD',
+                });
+
+                if (isNaN(price) || price == null || typeof (price) === 'undefined')
+                    return price;
+                else
+                    return formatter.format(price); /* e.g. $2,500.00 */
+            }
         }
     })
 </script>
